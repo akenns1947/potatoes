@@ -1,0 +1,206 @@
+------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\Users\Austin\Documents\grad_school\RA\Potato\PotatoStateSize\Replication_Austin\code\potato_
+> austin.txt
+  log type:  text
+ opened on:   3 Jan 2022, 12:37:24
+
+. 
+. /*This file links the output from ArcMap to the potato data for the Russian Empire*/
+. 
+. /*Only run if not already installed*/
+. *ssc install matchit
+. *ssc install freqindex
+. *ssc install dtalink
+. *ssc install reclink
+. 
+. /*Import arcmap data*/
+. import delimited "../output/provinces_centroids.txt"
+(13 vars, 103 obs)
+
+. 
+. /*Remove 'region' 'governate' 'district' for easier matching*/
+. 
+. replace prov_eng = subinstr(prov_eng, " governorate", "", .)
+(80 real changes made)
+
+. replace prov_eng = subinstr(prov_eng, " region", "", .)
+(19 real changes made)
+
+. replace prov_eng = subinstr(prov_eng, " district", "", .)
+(2 real changes made)
+
+. 
+. // /*Manually rename remaining provinces that don't match*/
+. replace prov_eng = subinstr(prov_eng, "Don Cossack host lands", "Donskoe Voysko", .)
+(1 real change made)
+
+. replace prov_eng = subinstr(prov_eng, "Estonia", "Estlyandskaya", .)
+(1 real change made)
+
+. replace prov_eng = subinstr(prov_eng, "Grodno", "Grodnenskayaafter1843", .)
+(1 real change made)
+
+. replace prov_eng = subinstr(prov_eng, "Kovno", "kovenskaya", .)
+(1 real change made)
+
+. // /*Note that there are two 'Livonia governorate' provinces in the output from ArcMap*/
+. replace prov_eng = subinstr(prov_eng, "Livonia", "Liflyandskaya", .)
+(2 real changes made)
+
+. replace prov_eng = subinstr(prov_eng, "Minsk", "Minskayafter1843", .)
+(1 real change made)
+
+. replace prov_eng = subinstr(prov_eng, "Moscow", "Moscovskaya", .)
+(1 real change made)
+
+. replace prov_eng = subinstr(prov_eng, "Orel", "Orlov", .)
+(1 real change made)
+
+. replace prov_eng = subinstr(prov_eng, "Simbirsk", "Simbirafter1851", .)
+(1 real change made)
+
+. replace prov_eng = subinstr(prov_eng, "Taurida", "Tavricheskayaafter1820", .)
+(1 real change made)
+
+. replace prov_eng = subinstr(prov_eng, "Vilna", "Vilenskayafdter1843", .)
+(1 real change made)
+
+. replace prov_eng = subinstr(prov_eng, "Viatka", "Vyatskaya", .)
+(1 real change made)
+
+. 
+. duplicates drop prov_eng, force
+
+Duplicates in terms of prov_eng
+
+(4 observations deleted)
+
+. 
+. save "../temporary/centroids_cleaned.dta", replace
+file ../temporary/centroids_cleaned.dta saved
+
+. 
+. clear all
+
+. 
+. use "../input/potatoes_russia_empire_19c.dta"
+
+. 
+. gen prov_short = province
+
+. 
+. /*Dropping 'skaya' significantly helps with fuzzy matching since it is so prevelant*/
+. replace prov_short = subinstr(prov_short, "skaya", "", .)
+(1,486 real changes made)
+
+. 
+. save "../temporary/potatoes.dta", replace
+file ../temporary/potatoes.dta saved
+
+. 
+. /*Fuzzy matching since some of the names don't exactly match*/
+. matchit id prov_short using "../temporary/centroids_cleaned.dta", idusing(fid) txtusing(prov_eng) threshol
+> d(.52) override
+Matching current dataset with ../temporary/centroids_cleaned.dta
+Similarity function: bigram
+Loading USING file: ../temporary/centroids_cleaned.dta
+Indexing USING file.
+0%
+20%
+40%
+60%
+80%
+Done!
+Computing results
+        Percent completed ...   (search space saved by index so far)
+        20%               ...   (76%)
+        40%               ...   (80%)
+        60%               ...   (82%)
+        80%               ...   (82%)
+        100%              ...   (79%)
+        Done!
+Total search space saved by index: 79%
+
+. 
+. /*Pick the best match based on score*/
+. gen negative = -(similscore)
+
+. 
+. sort negative
+
+. 
+. duplicates drop prov_short, force
+
+Duplicates in terms of prov_short
+
+(1,737 observations deleted)
+
+. 
+. sort prov_short
+
+. 
+. // drop if prov_eng == "Primorskaya"
+. //
+. // drop if prov_eng == "Pskovskaya" && province != "Pskovskaya"
+. 
+. /*This data now only has 'prov_eng' and 'prov_short' from each dataset. Used as a bridge between datasets*
+> /
+. save "../temporary/match.dta", replace
+file ../temporary/match.dta saved
+
+. 
+. clear all
+
+. /*Import arcmap data*/
+. use "../temporary/centroids_cleaned.dta"
+
+. 
+. merge 1:m prov_eng using "../temporary/match.dta"
+(note: variable id was byte, now int to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                            50
+        from master                        50  (_merge==1)
+        from using                          0  (_merge==2)
+
+    matched                                54  (_merge==3)
+    -----------------------------------------
+
+. 
+. duplicates drop prov_short, force
+
+Duplicates in terms of prov_short
+
+(49 observations deleted)
+
+. 
+. merge 1:m prov_short using "../temporary/potatoes.dta", generate(merge2)
+(note: variable id was int, now double to accommodate using data's values)
+(note: variable prov_short was str19, now str24 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             1
+        from master                         1  (merge2==1)
+        from using                          0  (merge2==2)
+
+    matched                             1,514  (merge2==3)
+    -----------------------------------------
+
+. 
+. /*Drop unmatched obs*/
+. drop if merge2 == 1
+(1 observation deleted)
+
+. 
+. sort province year
+
+. 
+. /*Drop unnecessary variables*/
+. 
+. drop join_count target_fid prov_eng id prov_short similscore negative _merge merge2
+
+. 
+. capture log close
